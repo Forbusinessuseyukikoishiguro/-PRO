@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="ja">
+<!--
+  ラベンダー研修スライド・ジェネレーター（アーティファクト版 / うさうさ研修工房）
+  Version: 1.0.0 PRO (2026-06-13)
+  ============================ CHANGELOG ============================
+  - v1.0.0 PRO (2026-06-13)
+    - 初の商用テスト済みリリース（アーティファクト版：APIキー設定不要・内蔵Claudeで生成）
+    - スライド構成生成（表紙〜まとめ／講師ノート／演習／所要分）
+    - 書き出し：.pptx（純JS・外部依存なしのOOXML生成）／PDF（印刷）／Markdown／講師メモ(.md)
+    - 使い方「黒板」、🐛ログ（window.onerror捕捉・コピー）、見本デック
+    - 開発版(v0.x：チャット内artifact／キー入力スタンドアロン)からの正式版
+    - 商用グレード jsdom テスト：単体/結合/総合/WB/BB/モンキー＋静的解析、全項目グリーン（5回連続）
+  ==================================================================
+-->
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ラベンダー研修スライド・ジェネレーター｜うさうさ研修工房</title>
+<style>
+  :root{
+    --bg:#F6F3FB;--ink:#382A52;--ink-soft:#6B5A8A;
+    --lav-50:#EFEAF8;--lav-100:#E6DEF5;--lav-200:#D2C5EC;--lav-400:#A98FD8;--lav-500:#8E6FCB;--lav-600:#7558B0;
+    --plum:#4A3370;--sage:#8AA06E;--sage-deep:#6E8456;--amber:#C28A24;--rose:#BE708F;
+    --line:#E0D6F0;--card:#FFFFFF;
+    --display:"Hiragino Mincho ProN","Yu Mincho","YuMincho",serif;
+    --body:"Hiragino Kaku Gothic ProN","Yu Gothic","YuGothic","Meiryo",sans-serif;
+    --shadow:0 10px 30px -12px rgba(74,51,112,.28);
+  }
+  *{box-sizing:border-box}
+  [hidden]{display:none!important}
+  html,body{margin:0;padding:0}
+  body{font-family:var(--body);color:var(--ink);background:var(--bg);line-height:1.7;-webkit-font-smoothing:antialiased;min-height:100vh}
+  #bgwrap{position:fixed;inset:0;z-index:-1;pointer-events:none;overflow:hidden}
+  #bgwrap svg{width:100%;height:100%}
+  a{color:var(--lav-600)}
+
+  header{position:relative;padding:36px 24px 22px;text-align:center;overflow:hidden}
+  .eyebrow{font-size:.82rem;letter-spacing:.18em;font-weight:700;color:var(--lav-600);display:inline-flex;align-items:center;gap:.4em}
+  h1{font-family:var(--display);font-weight:600;font-size:clamp(1.6rem,4.2vw,2.5rem);color:var(--plum);margin:.25em 0 .15em;letter-spacing:.02em}
+  .lede{color:var(--ink-soft);font-size:.96rem;margin:0 auto;max-width:34em}
+  .badges{margin-top:11px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+  .verpill{font-size:.74rem;font-weight:700;color:#fff;background:linear-gradient(135deg,var(--lav-500),var(--plum));padding:3px 12px;border-radius:999px;letter-spacing:.03em}
+  .badge-soft{font-size:.74rem;font-weight:700;color:var(--sage-deep);background:#EEF3E6;border:1px solid #cfe0bd;padding:3px 12px;border-radius:999px}
+  .header-sprig{position:absolute;top:-14px;width:74px;opacity:.5}
+  .header-sprig.left{left:4%}.header-sprig.right{right:4%;transform:scaleX(-1)}
+
+  .wrap{max-width:1180px;margin:0 auto;padding:0 20px 40px}
+
+  .board{position:relative;border-radius:16px;margin:0 0 24px;overflow:hidden;
+    background:radial-gradient(circle at 18% 30%, rgba(255,255,255,.05) 0 1px, transparent 2px),radial-gradient(circle at 70% 65%, rgba(255,255,255,.04) 0 1px, transparent 2px),linear-gradient(160deg,#33473b,#27332c);
+    border:10px solid #6b4e34;box-shadow:inset 0 0 60px rgba(0,0,0,.4),var(--shadow)}
+  .board::after{content:"";position:absolute;inset:0;background:linear-gradient(115deg,transparent 40%,rgba(255,255,255,.035) 50%,transparent 60%);pointer-events:none}
+  .board summary{cursor:pointer;list-style:none;padding:14px 22px;color:#f3efe2;font-family:var(--display);font-size:1.1rem;display:flex;align-items:center;gap:10px;text-shadow:0 0 8px rgba(255,255,255,.18)}
+  .board summary::-webkit-details-marker{display:none}
+  .board summary .chev{margin-left:auto;transition:.2s}
+  .board[open] summary .chev{transform:rotate(90deg)}
+  .board .chalk{padding:4px 26px 24px;color:#f3efe2;text-shadow:0 0 7px rgba(255,255,255,.16)}
+  .board h4{color:#cdb8ee;font-family:var(--display);font-size:1rem;margin:14px 0 6px;letter-spacing:.03em}
+  .board ol{margin:0;padding-left:1.3em}
+  .board ol li{margin:7px 0;font-size:.94rem}
+  .board ol li b{color:#e9dcff}
+  .board .tips{margin-top:14px;border-top:1px dashed rgba(243,239,226,.35);padding-top:12px;font-size:.86rem;color:#dfe7d8}
+  .board .tips span{display:block;margin:5px 0}
+  .board .tips b{color:#c6e0a8}
+
+  .grid{display:grid;grid-template-columns:392px 1fr;gap:26px;align-items:start}
+  @media(max-width:880px){.grid{grid-template-columns:1fr}}
+
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);overflow:hidden}
+  .panel-head{background:linear-gradient(135deg,var(--lav-500),var(--lav-600));color:#fff;padding:16px 22px;display:flex;align-items:center;gap:10px}
+  .panel-head .ico{width:26px;height:34px;flex:0 0 auto}
+  .panel-head h2{font-family:var(--display);font-weight:600;font-size:1.14rem;margin:0}
+  .panel-head p{margin:.1em 0 0;font-size:.76rem;opacity:.85}
+  form#designer{padding:20px 22px 24px;position:sticky;top:14px}
+  .field{margin-bottom:16px}.field:last-child{margin-bottom:0}
+  label.lbl{display:block;font-weight:700;font-size:.84rem;margin-bottom:7px;color:var(--plum)}
+  label.lbl .hint{font-weight:400;color:var(--ink-soft);font-size:.78rem}
+  input[type=text],textarea,select{width:100%;font-family:var(--body);font-size:.92rem;color:var(--ink);border:1.5px solid var(--line);border-radius:11px;padding:10px 12px;background:#FCFBFE;transition:border-color .15s,box-shadow .15s}
+  textarea{resize:vertical;min-height:60px;line-height:1.6}
+  input:focus,textarea:focus,select:focus{outline:none;border-color:var(--lav-400);box-shadow:0 0 0 3px rgba(169,143,216,.25)}
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{position:relative;display:inline-flex}
+  .chip input{position:absolute;opacity:0;width:100%;height:100%;cursor:pointer;margin:0}
+  .chip span{display:inline-block;padding:7px 13px;border-radius:999px;border:1.5px solid var(--line);background:#FCFBFE;font-size:.82rem;color:var(--ink-soft);cursor:pointer;transition:.15s;user-select:none}
+  .chip input:checked + span{background:var(--lav-100);border-color:var(--lav-400);color:var(--plum);font-weight:700}
+  .chip input:focus-visible + span{box-shadow:0 0 0 3px rgba(169,143,216,.35)}
+  .signature{margin-top:4px;border:1.5px dashed var(--lav-200);border-radius:13px;padding:11px 13px;background:linear-gradient(180deg,#fff,#FBF8FE);display:flex;gap:11px;align-items:flex-start;cursor:pointer}
+  .signature input{margin-top:3px;accent-color:var(--lav-600);transform:scale(1.15)}
+  .signature .txt b{color:var(--plum);font-size:.86rem}
+  .signature .txt small{display:block;color:var(--ink-soft);font-size:.76rem;line-height:1.45}
+  .btn-go{width:100%;margin-top:20px;border:none;cursor:pointer;font-family:var(--display);font-weight:600;font-size:1.05rem;color:#fff;background:linear-gradient(135deg,var(--lav-500),var(--plum));padding:14px;border-radius:13px;letter-spacing:.03em;box-shadow:0 8px 18px -7px rgba(74,51,112,.6);transition:transform .12s,filter .15s}
+  .btn-go:hover{filter:brightness(1.06)}.btn-go:active{transform:translateY(1px)}
+  .btn-go:disabled{opacity:.55;cursor:not-allowed;filter:grayscale(.3)}
+
+  .stage{min-height:420px}
+  .empty{background:var(--card);border:1px solid var(--line);border-radius:20px;box-shadow:var(--shadow);padding:46px 30px;text-align:center}
+  .empty .big-sprig{width:64px;margin-bottom:10px;opacity:.85}
+  .empty h3{font-family:var(--display);color:var(--plum);font-size:1.25rem;margin:.1em 0 .3em}
+  .empty p{color:var(--ink-soft);max-width:30em;margin:0 auto 18px;font-size:.92rem}
+  .btn-ghost{border:1.5px solid var(--lav-200);background:#fff;color:var(--lav-600);font-family:var(--body);font-weight:700;font-size:.86rem;cursor:pointer;padding:9px 18px;border-radius:10px;transition:.15s}
+  .btn-ghost:hover{background:var(--lav-50);border-color:var(--lav-400)}
+
+  .loading{text-align:center;padding:60px 20px}
+  .sway{display:inline-block;transform-origin:50% 100%;animation:sway 2.6s ease-in-out infinite}
+  .sway:nth-child(2){animation-delay:.4s}.sway:nth-child(3){animation-delay:.8s}
+  @keyframes sway{0%,100%{transform:rotate(-7deg)}50%{transform:rotate(7deg)}}
+  .loading p{color:var(--lav-600);font-weight:700;margin-top:10px;font-family:var(--display)}
+  .loading small{color:var(--ink-soft);display:block}
+
+  .toolbar{display:flex;flex-wrap:wrap;gap:9px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:15px;padding:13px 16px;margin-bottom:18px;box-shadow:var(--shadow)}
+  .toolbar .meta{flex:1 1 100%;margin-bottom:4px}
+  .toolbar .meta b{font-family:var(--display);color:var(--plum);font-size:1.02rem}
+  .toolbar .meta span{display:block;color:var(--ink-soft);font-size:.78rem}
+  .tb-btn{border:1.5px solid var(--lav-200);background:#fff;color:var(--lav-600);font-family:var(--body);font-weight:700;font-size:.8rem;cursor:pointer;padding:8px 13px;border-radius:9px;transition:.15s;white-space:nowrap}
+  .tb-btn:hover{background:var(--lav-50);border-color:var(--lav-400)}
+  .tb-btn.primary{background:var(--lav-600);color:#fff;border-color:var(--lav-600)}
+  .tb-btn.primary:hover{filter:brightness(1.08)}
+  .tb-btn.ppt{background:var(--plum);color:#fff;border-color:var(--plum)}
+  .tb-btn.ppt:hover{filter:brightness(1.12)}
+
+  .slide{background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:var(--shadow);margin-bottom:18px;overflow:hidden;border-top:5px solid var(--lav-400);animation:rise .4s ease both}
+  @keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  .slide-top{display:flex;align-items:center;gap:11px;padding:15px 20px 10px}
+  .num{width:34px;height:34px;flex:0 0 auto;border-radius:50%;background:var(--lav-100);color:var(--plum);font-weight:700;display:flex;align-items:center;justify-content:center;font-size:.92rem}
+  .slide-title{font-family:var(--display);font-weight:600;font-size:1.18rem;color:var(--plum);margin:0;flex:1}
+  .tag{font-size:.72rem;font-weight:700;color:#fff;padding:3px 11px;border-radius:999px;white-space:nowrap}
+  .mins{font-size:.74rem;color:var(--ink-soft);white-space:nowrap}
+  .slide-body{padding:4px 20px 18px}
+  .bullets{margin:6px 0 0;padding-left:0;list-style:none}
+  .bullets li{position:relative;padding-left:22px;margin:6px 0;font-size:.93rem}
+  .bullets li::before{content:"";position:absolute;left:4px;top:.62em;width:8px;height:8px;border-radius:50%;background:var(--lav-400)}
+  .note,.activity{margin-top:13px;border-radius:11px;padding:11px 14px;font-size:.86rem;line-height:1.6}
+  .note{background:var(--lav-50);border-left:4px solid var(--lav-400);color:var(--ink)}
+  .activity{background:#FBF1F6;border-left:4px solid var(--rose);color:#5d3a4c}
+  .note b,.activity b{display:block;font-size:.74rem;letter-spacing:.04em;margin-bottom:2px}
+  .note b{color:var(--lav-600)}.activity b{color:var(--rose)}
+
+  .logpanel{margin-top:26px;border:1.5px solid var(--lav-200);border-radius:14px;background:#fff;overflow:hidden}
+  .logpanel summary{cursor:pointer;list-style:none;padding:12px 16px;font-weight:700;font-size:.86rem;color:var(--plum);display:flex;align-items:center;gap:8px}
+  .logpanel summary::-webkit-details-marker{display:none}
+  .logpanel summary .dot{width:9px;height:9px;border-radius:50%;background:var(--sage)}
+  .logpanel summary .dot.err{background:var(--rose)}
+  .logpanel summary .chev{margin-left:auto;transition:.2s;color:var(--lav-500)}
+  .logpanel[open] summary .chev{transform:rotate(90deg)}
+  .log-tools{display:flex;gap:8px;padding:0 16px 10px}
+  .log-tools button{border:1.5px solid var(--lav-200);background:#fff;color:var(--lav-600);font-weight:700;font-size:.76rem;cursor:pointer;padding:6px 11px;border-radius:8px}
+  .log-tools button:hover{background:var(--lav-50)}
+  #logBox{margin:0;max-height:240px;overflow:auto;background:#2a2238;color:#e7defb;font-family:"SF Mono",Consolas,Menlo,monospace;font-size:.76rem;line-height:1.55;padding:12px 16px;white-space:pre-wrap;word-break:break-word}
+  #logBox .lerr{color:#ffb4c4}#logBox .lwarn{color:#ffd9a0}#logBox .lok{color:#bfe9a6}#logBox .lt{color:#9b8bc0}
+
+  .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);background:var(--plum);color:#fff;padding:11px 22px;border-radius:999px;font-size:.86rem;font-weight:700;box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:.25s;z-index:50}
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  .err{background:#fbecec;border:1px solid #e7b9b9;color:#8a3030;border-radius:14px;padding:16px 18px;font-size:.9rem}
+  .err b{display:block;margin-bottom:3px}
+  footer{text-align:center;color:var(--ink-soft);font-size:.78rem;padding:18px 20px 40px}
+
+  @media(prefers-reduced-motion:reduce){.sway{animation:none}.slide{animation:none}}
+
+  #printArea{display:none}
+  @media print{
+    @page{size:A4 landscape;margin:14mm}
+    body{background:#fff}
+    #bgwrap,header,.board,.grid,.logpanel,footer,.toast{display:none !important}
+    #printArea{display:block}
+    .p-slide{page-break-after:always;border:1px solid #d8cdee;border-top:6px solid var(--lav-500);border-radius:10px;padding:22px 26px;margin:0 0 8mm}
+    .p-slide:last-child{page-break-after:auto}
+    .p-cover{text-align:center;padding-top:60mm}
+    .p-cover h1{font-family:var(--display);color:var(--plum);font-size:30pt;margin:0 0 8pt}
+    .p-cover p{color:var(--ink-soft)}
+    .p-top{display:flex;align-items:baseline;gap:10px;margin-bottom:8px}
+    .p-num{font-weight:700;color:var(--plum)}
+    .p-title{font-family:var(--display);font-size:17pt;color:var(--plum);margin:0;flex:1}
+    .p-tag{font-size:8pt;font-weight:700;color:#fff;padding:2px 9px;border-radius:999px}
+    .p-mins{font-size:8pt;color:var(--ink-soft)}
+    .p-slide ul{margin:6px 0;padding-left:18px}.p-slide li{margin:3px 0;font-size:11pt}
+    .p-note,.p-act{margin-top:8px;font-size:9.5pt;padding:7px 10px;border-radius:7px}
+    .p-note{background:#f0ecf8;border-left:3px solid var(--lav-500)}
+    .p-act{background:#fbf1f6;border-left:3px solid var(--rose)}
+  }
+</style>
+</head>
+<body>
+
+<div id="bgwrap" aria-hidden="true">
+  <svg xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <symbol id="sprig" viewBox="0 0 40 64">
+        <path d="M20 64 C20 50 19 42 20 28" fill="none" stroke="#8AA06E" stroke-width="1.6" stroke-linecap="round"/>
+        <path d="M20 50 C13 47 10 49 8 53 C13 53 17 53 20 50 Z" fill="#9DB081"/>
+        <path d="M20 44 C27 41 30 43 32 47 C27 47 23 47 20 44 Z" fill="#9DB081"/>
+        <g fill="#A98FD8">
+          <ellipse cx="20" cy="26" rx="4" ry="5.4"/><ellipse cx="14.5" cy="22" rx="3.4" ry="4.6" fill="#9476C9"/>
+          <ellipse cx="25.5" cy="22" rx="3.4" ry="4.6" fill="#9476C9"/><ellipse cx="20" cy="18" rx="3.6" ry="4.8"/>
+          <ellipse cx="15.5" cy="13.5" rx="3" ry="4" fill="#B49CDF"/><ellipse cx="24.5" cy="13.5" rx="3" ry="4" fill="#B49CDF"/>
+          <ellipse cx="20" cy="9.5" rx="3" ry="4.2" fill="#8E6FCB"/><ellipse cx="20" cy="4" rx="2.4" ry="3.4" fill="#7558B0"/>
+        </g>
+      </symbol>
+      <pattern id="lav" width="150" height="170" patternUnits="userSpaceOnUse" patternTransform="rotate(-4)">
+        <use href="#sprig" x="14" y="6" width="34" height="54" opacity=".5"/>
+        <use href="#sprig" x="92" y="40" width="28" height="46" opacity=".4" transform="rotate(14 106 63)"/>
+        <use href="#sprig" x="56" y="96" width="32" height="52" opacity=".5" transform="rotate(-12 72 122)"/>
+        <use href="#sprig" x="116" y="116" width="26" height="42" opacity=".38" transform="rotate(8 129 137)"/>
+      </pattern>
+    </defs>
+    <rect width="100%" height="100%" fill="var(--bg)"/>
+    <rect width="100%" height="100%" fill="url(#lav)" opacity=".22"/>
+  </svg>
+</div>
+
+<header>
+  <svg class="header-sprig left" viewBox="0 0 40 64"><use href="#sprig"/></svg>
+  <svg class="header-sprig right" viewBox="0 0 40 64"><use href="#sprig"/></svg>
+  <span class="eyebrow">🐰 うさうさ研修工房</span>
+  <h1>ラベンダー研修スライド・ジェネレーター</h1>
+  <p class="lede">テーマと条件から、新卒研修ワークショップのスライド構成を生成し<br>.pptx / PDF / Markdown / 講師メモ に書き出せます。</p>
+  <div class="badges">
+    <span class="verpill">v1.0.0 PRO</span>
+    <span class="badge-soft">🪻 APIキー設定不要・内蔵Claudeで生成</span>
+  </div>
+</header>
+
+<div class="wrap">
+
+  <details class="board" id="board" open>
+    <summary>📋 使い方（黒板）<span class="chev">▸</span></summary>
+    <div class="chalk">
+      <h4>3ステップ</h4>
+      <ol>
+        <li><b>テーマと条件を入れて「スライドを生成する」</b> — 所要時間で枚数の目安が変わります。<b>APIキーの設定は不要</b>です。</li>
+        <li><b>できた構成を確認</b> — 気になったら「作り直す」で何度でも。</li>
+        <li><b>書き出し</b> — <b>.pptx</b>（PowerPoint）／<b>PDF</b>（印刷から保存）／<b>Markdown</b>／<b>講師メモ</b>。</li>
+      </ol>
+      <div class="tips">
+        <span>🪻 <b>まず形を見たいとき：</b>「見本のスライドを見る」で書き出しも試せます。</span>
+        <span>🍜 <b>たとえ話：</b>チェックを入れると「うさうさラーメン店」で用語をやさしく解説します。</span>
+        <span>🐛 <b>うまく動かないとき：</b>ページ下の「ログ」を開いて内容をコピーすると原因が分かります。</span>
+      </div>
+    </div>
+  </details>
+
+  <div class="grid">
+    <div class="panel">
+      <div class="panel-head">
+        <svg class="ico" viewBox="0 0 40 64"><use href="#sprig"/></svg>
+        <div><h2>研修の設計図</h2><p>条件をうめて「スライドを生成」</p></div>
+      </div>
+      <form id="designer" onsubmit="return false">
+        <div class="field">
+          <label class="lbl" for="theme">研修テーマ <span class="hint">必須</span></label>
+          <input type="text" id="theme" placeholder="例：Linux基礎／Python入門／情報セキュリティの基本" autocomplete="off">
+        </div>
+        <div class="row">
+          <div class="field"><label class="lbl" for="audience">対象者</label>
+            <select id="audience"><option>新卒エンジニア</option><option>中途・若手エンジニア</option><option>文系出身の未経験者</option><option>新卒・中途の混在</option></select></div>
+          <div class="field"><label class="lbl" for="level">レベル</label>
+            <select id="level"><option>入門（前提知識なし）</option><option>初級</option><option>中級</option><option>応用</option></select></div>
+        </div>
+        <div class="row">
+          <div class="field"><label class="lbl" for="duration">所要時間</label>
+            <select id="duration"><option value="30分,6〜8">30分</option><option value="60分,9〜12" selected>60分</option><option value="90分,12〜14">90分</option><option value="半日(3〜4時間),12〜15(章立て中心)">半日（3〜4時間）</option></select></div>
+          <div class="field"><label class="lbl" for="tone">トーン</label>
+            <select id="tone"><option>やさしく丁寧に</option><option>テンポよく明るく</option><option>がっつり技術重視</option></select></div>
+        </div>
+        <div class="field"><label class="lbl" for="goal">学習ゴール <span class="hint">任意</span></label>
+          <textarea id="goal" placeholder="例：研修後に自分でVMを立ち上げ、基本コマンドで操作できる状態を目指す"></textarea></div>
+        <div class="field"><label class="lbl">含める要素</label>
+          <div class="chips" id="elements">
+            <label class="chip"><input type="checkbox" value="導入アイスブレイク" checked><span>導入・アイスブレイク</span></label>
+            <label class="chip"><input type="checkbox" value="ハンズオン演習" checked><span>ハンズオン演習</span></label>
+            <label class="chip"><input type="checkbox" value="理解度クイズ"><span>理解度クイズ</span></label>
+            <label class="chip"><input type="checkbox" value="実務事例の紹介"><span>実務事例</span></label>
+            <label class="chip"><input type="checkbox" value="つまずきポイント解説"><span>つまずき解説</span></label>
+            <label class="chip"><input type="checkbox" value="振り返りとQ&A" checked><span>振り返り・Q&A</span></label>
+          </div></div>
+        <div class="field"><label class="signature">
+          <input type="checkbox" id="ramen">
+          <span class="txt"><b>🍜 うさうさラーメン店のたとえ話を使う</b><small>専門用語を、おなじみのラーメン店メタファーでやさしく解説します。</small></span>
+        </label></div>
+        <button class="btn-go" id="go" onclick="generate()">スライドを生成する</button>
+      </form>
+    </div>
+
+    <div class="stage" id="stage">
+      <div class="empty" id="empty">
+        <svg class="big-sprig" viewBox="0 0 40 64"><use href="#sprig"/></svg>
+        <h3>ここにスライド束が並びます</h3>
+        <p>設計図をうめて「スライドを生成する」を押してください。<b>キー設定は不要</b>です。まずは「見本」で形と書き出しを試すこともできます。</p>
+        <button class="btn-ghost" onclick="showSample()">見本のスライドを見る</button>
+      </div>
+    </div>
+  </div>
+
+  <details class="logpanel" id="logPanel">
+    <summary><span class="dot" id="logDot"></span>🐛 ログ（動作・エラーの記録）<span class="chev">▸</span></summary>
+    <div class="log-tools">
+      <button onclick="copyLog()">ログをコピー</button>
+      <button onclick="clearLog()">クリア</button>
+    </div>
+    <pre id="logBox"></pre>
+  </details>
+
+  <footer>うさうさ研修工房 ／ ラベンダー研修スライド・ジェネレーター PRO v1.0.0 ・ 2026-06-13 🐰🪻</footer>
+</div>
+
+<div id="printArea"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ===================== ログ ===================== */
+var LOG=[];
+function log(level,msg){
+  var t=new Date().toLocaleTimeString('ja-JP',{hour12:false});
+  LOG.push({t:t,level:level,msg:String(msg)});
+  var box=document.getElementById('logBox');
+  if(box){
+    var cls=level==='err'?'lerr':level==='warn'?'lwarn':level==='ok'?'lok':'';
+    box.innerHTML+='<span class="lt">['+esc(t)+']</span> <span class="'+cls+'">'+esc(level.toUpperCase())+'</span> '+esc(msg)+'\n';
+    box.scrollTop=box.scrollHeight;
+  }
+  if(level==='err'){var d=document.getElementById('logDot');if(d)d.classList.add('err');}
+}
+window.addEventListener('error',function(e){log('err','JSエラー: '+(e.message||e)+(e.filename?(' @'+e.lineno+':'+e.colno):''));});
+window.addEventListener('unhandledrejection',function(e){log('err','未処理の例外: '+(e.reason&&e.reason.message?e.reason.message:e.reason));});
+function copyLog(){var txt=LOG.map(function(l){return '['+l.t+'] '+l.level.toUpperCase()+' '+l.msg;}).join('\n')||'(ログは空です)';copyText(txt,'ログをコピーしました 📋');}
+function clearLog(){LOG.length=0;document.getElementById('logBox').innerHTML='';document.getElementById('logDot').classList.remove('err');log('info','ログをクリアしました');}
+
+/* ===================== 共通 ===================== */
+var TYPE_COLORS={"表紙":"#4A3370","タイトル":"#4A3370","導入":"#6E8456","アイスブレイク":"#6E8456","本編":"#7558B0","解説":"#7558B0","演習":"#BE708F","ハンズオン":"#BE708F","クイズ":"#C28A24","事例":"#6E8456","つまずき":"#BE708F","まとめ":"#4A3370","振り返り":"#4A3370","Q&A":"#4A3370"};
+function tagColor(t){t=(t==null?'':String(t));for(var k in TYPE_COLORS){if(t.indexOf(k)>=0)return TYPE_COLORS[k];}return"#8E6FCB";}
+function hex(t){return tagColor(t).replace('#','');}
+function arr(x){return (Object.prototype.toString.call(x)==='[object Array]')?x:[];}
+function esc(s){return(s==null?"":String(s)).replace(/[&<>]/g,function(c){return({"&":"&amp;","<":"&lt;",">":"&gt;"})[c];});}
+function toast(msg){var t=document.getElementById('toast');t.textContent=msg;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(function(){t.classList.remove('show');},1900);}
+function todayStamp(){var d=new Date();function p(n){return(n<10?'0':'')+n;}return ''+d.getFullYear()+p(d.getMonth()+1)+p(d.getDate());}
+var currentDeck=null,currentTheme="";
+
+/* ===================== 生成 ===================== */
+function buildPrompt(){
+  var theme=document.getElementById('theme').value.trim();
+  var audience=document.getElementById('audience').value;
+  var level=document.getElementById('level').value;
+  var dv=document.getElementById('duration').value.split(','),duration=dv[0],countHint=dv[1];
+  var tone=document.getElementById('tone').value;
+  var goal=document.getElementById('goal').value.trim();
+  var els=[].slice.call(document.querySelectorAll('#elements input:checked')).map(function(c){return c.value;});
+  var ramen=document.getElementById('ramen').checked;
+  return 'あなたは新卒エンジニア研修を数多く手がける一流の研修設計者です。以下の条件で、研修ワークショップ用のスライド構成案を作ってください。\n\n'+
+  '# 条件\n'+
+  '- 研修テーマ: '+theme+'\n'+
+  '- 対象者: '+audience+'\n'+
+  '- レベル: '+level+'\n'+
+  '- 所要時間: '+duration+'（スライド枚数の目安: '+countHint+'枚）\n'+
+  '- トーン: '+tone+'\n'+
+  '- 学習ゴール: '+(goal||'テーマに沿って講師として適切に設定する')+'\n'+
+  '- 含める要素: '+(els.join('、')||'おまかせ')+'\n'+
+  (ramen?'- 「うさうさラーメン店」というラーメン店のたとえ話を1〜2か所で使い、専門用語を初心者にやさしく解説すること。\n':'')+
+  '\n# 出力ルール\n'+
+  '- 必ず日本語で書く。\n'+
+  '- 1枚目は表紙、最後は「まとめ／振り返り」で終える。\n'+
+  '- bullets は各スライド最大5項目、短いフレーズで。\n'+
+  '- notes には講師が口頭で話す要点を1〜2文で書く。\n'+
+  '- 演習・クイズのスライドは activity に具体的な手順や問いを書く（それ以外は空文字）。\n'+
+  '- type は「表紙／導入／本編／演習／クイズ／事例／まとめ」から選ぶ。\n'+
+  '- minutes は所要時間の目安(分)を数値で。\n'+
+  '- JSON配列のみを出力。前置き・後置き・マークダウンの囲みは一切書かない。\n\n'+
+  '# 出力フォーマット\n'+
+  '[{"no":1,"type":"表紙","title":"...","bullets":["..."],"notes":"...","minutes":3,"activity":""}]';
+}
+
+function parseDeck(text){
+  text=text.replace(/```json/gi,'').replace(/```/g,'').trim();
+  var s=text.indexOf('['),e=text.lastIndexOf(']');
+  if(s<0||e<0)throw new Error('構成案(JSON)を読み取れませんでした');
+  var deck=JSON.parse(text.slice(s,e+1));
+  if(!Array.isArray(deck)||!deck.length)throw new Error('スライドが空でした');
+  return deck;
+}
+
+function generate(){
+  var theme=document.getElementById('theme').value.trim();
+  if(!theme){toast('研修テーマを入れてくださいね 🪻');document.getElementById('theme').focus();log('warn','テーマ未入力のため生成を中止');return Promise.resolve();}
+  var go=document.getElementById('go');go.disabled=true;go.textContent='生成中…';
+  renderLoading();currentTheme=theme;
+  log('info','生成開始: テーマ「'+theme+'」（内蔵Claude / claude-sonnet-4-6）');
+  var started=(window.performance&&performance.now)?performance.now():Date.now();
+  return fetch("https://api.anthropic.com/v1/messages",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:4096,messages:[{role:"user",content:buildPrompt()}]})
+  }).then(function(res){
+    log('info','API応答ステータス: '+res.status);
+    if(!res.ok){
+      return res.json().then(function(j){
+        var d=(j&&j.error&&j.error.message)?'：'+j.error.message:'';
+        throw new Error('API応答エラー ('+res.status+')'+d);
+      },function(){throw new Error('API応答エラー ('+res.status+')');});
+    }
+    return res.json();
+  }).then(function(data){
+    var text=(data.content||[]).filter(function(b){return b.type==="text";}).map(function(b){return b.text;}).join("");
+    log('info','本文受信: '+text.length+'文字');
+    var deck=parseDeck(text);
+    currentDeck=deck;renderDeck(deck);
+    var ms=Math.round(((window.performance&&performance.now)?performance.now():Date.now())-started);
+    log('ok','生成成功: '+deck.length+'枚 / '+ms+'ms');
+  }).catch(function(err){
+    var m=err.message||String(err);
+    if(/Failed to fetch|NetworkError/i.test(m))m='ネットワークに接続できませんでした。少し待って再度お試しください（見本はオフラインでも見られます）。';
+    log('err','生成失敗: '+m);
+    renderError(m);
+  }).then(function(){
+    var g=document.getElementById('go');g.disabled=false;g.textContent='スライドを生成する';
+  });
+}
+
+function renderLoading(){
+  document.getElementById('stage').innerHTML='<div class="empty loading"><div>'+
+    '<svg class="sway" style="width:40px" viewBox="0 0 40 64"><use href="#sprig"/></svg>'+
+    '<svg class="sway" style="width:48px" viewBox="0 0 40 64"><use href="#sprig"/></svg>'+
+    '<svg class="sway" style="width:40px" viewBox="0 0 40 64"><use href="#sprig"/></svg></div>'+
+    '<p>ラベンダーを束ねています…</p><small>スライドの構成を考えています。少々お待ちください。</small></div>';
+}
+function renderError(msg){document.getElementById('stage').innerHTML='<div class="err"><b>うまく生成できませんでした</b>'+esc(msg)+'<br>もう一度お試しください。詳しくは下の「ログ」をご覧ください。</div>';}
+function totalMins(d){return d.reduce(function(a,s){return a+(Number(s.minutes)||0);},0);}
+
+function renderDeck(deck){
+  var total=totalMins(deck);
+  var html='<div class="toolbar">'+
+    '<div class="meta"><b>'+esc(currentTheme)+'</b><span>'+deck.length+'枚 ／ 合計 約'+total+'分</span></div>'+
+    '<button class="tb-btn ppt" onclick="exportPptx()">.pptx で保存</button>'+
+    '<button class="tb-btn primary" onclick="exportPdf()">PDF（印刷）</button>'+
+    '<button class="tb-btn" onclick="copyMarkdown()">Markdownコピー</button>'+
+    '<button class="tb-btn" onclick="downloadMarkdown()">.md 保存</button>'+
+    '<button class="tb-btn" onclick="downloadMemo()">講師メモ(.md)</button>'+
+    '<button class="tb-btn" onclick="generate()">作り直す</button>'+
+  '</div>';
+  deck.forEach(function(sl,i){
+    var col=tagColor(sl.type);
+    var bullets=arr(sl.bullets).map(function(b){return '<li>'+esc(b)+'</li>';}).join('');
+    html+='<div class="slide" style="border-top-color:'+col+';animation-delay:'+(i*0.05)+'s">'+
+      '<div class="slide-top"><div class="num">'+esc(sl.no||i+1)+'</div>'+
+        '<h3 class="slide-title">'+esc(sl.title)+'</h3>'+
+        '<span class="tag" style="background:'+col+'">'+esc(sl.type||'本編')+'</span>'+
+        (sl.minutes?'<span class="mins">'+esc(sl.minutes)+'分</span>':'')+'</div>'+
+      '<div class="slide-body">'+
+        (bullets?'<ul class="bullets">'+bullets+'</ul>':'')+
+        (sl.activity?'<div class="activity"><b>🛠 演習・ワーク</b>'+esc(sl.activity)+'</div>':'')+
+        (sl.notes?'<div class="note"><b>🎙 講師ノート</b>'+esc(sl.notes)+'</div>':'')+
+      '</div></div>';
+  });
+  document.getElementById('stage').innerHTML=html;
+}
+
+/* ===================== Markdown / 講師メモ ===================== */
+function deckToMarkdown(){
+  var md='# '+currentTheme+'\n\n';
+  currentDeck.forEach(function(sl,i){
+    md+='## '+(sl.no||i+1)+'. '+sl.title+'　['+(sl.type||'本編')+']'+(sl.minutes?('（'+sl.minutes+'分）'):'')+'\n\n';
+    arr(sl.bullets).forEach(function(b){md+='- '+b+'\n';});
+    if(sl.activity)md+='\n> 🛠 **演習・ワーク**：'+sl.activity+'\n';
+    if(sl.notes)md+='\n> 🎙 **講師ノート**：'+sl.notes+'\n';
+    md+='\n';
+  });
+  md+='---\n_うさうさ研修工房 ／ ラベンダー研修スライド・ジェネレーター PRO v1.0.0 より 🐰🪻_\n';
+  return md;
+}
+function deckToMemo(){
+  var total=totalMins(currentDeck);
+  var md='# '+currentTheme+'　講師メモ\n合計 約'+total+'分 ／ '+currentDeck.length+'枚\n\n';
+  currentDeck.forEach(function(sl,i){
+    md+='### ['+(sl.no||i+1)+'] '+sl.title+'　（'+(sl.type||'本編')+(sl.minutes?('・'+sl.minutes+'分'):'')+'）\n';
+    var __bl=arr(sl.bullets);if(__bl.length)md+='- 要点：'+__bl.join(' / ')+'\n';
+    if(sl.notes)md+='- 🎙 トーク：'+sl.notes+'\n';
+    if(sl.activity)md+='- 🛠 ワーク：'+sl.activity+'\n';
+    md+='\n';
+  });
+  md+='---\n_講師メモ（うさうさ研修工房）🐰_\n';
+  return md;
+}
+function saveBlob(content,filename,mime){
+  var blob=new Blob([content],{type:mime});
+  var a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=filename;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(function(){URL.revokeObjectURL(a.href);},1500);
+}
+function safeName(){return (currentTheme||'研修スライド').replace(/[\\/:*?"<>|]/g,'_');}
+function copyText(text,okMsg){
+  var done=function(){toast(okMsg);};
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(done,fb);}else{fb();}
+  function fb(){var ta=document.createElement('textarea');ta.value=text;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();try{document.execCommand('copy');done();}catch(e){toast('コピーできませんでした');}document.body.removeChild(ta);}
+}
+function copyMarkdown(){if(!currentDeck)return;copyText(deckToMarkdown(),'Markdownをコピーしました 🪻');log('ok','Markdownをコピー');}
+function downloadMarkdown(){if(!currentDeck)return;saveBlob(deckToMarkdown(),safeName()+'_構成案_'+todayStamp()+'.md','text/markdown;charset=utf-8');toast('.md を保存しました 🐰');log('ok','Markdown(.md)を保存');}
+function downloadMemo(){if(!currentDeck)return;saveBlob(deckToMemo(),safeName()+'_講師メモ_'+todayStamp()+'.md','text/markdown;charset=utf-8');toast('講師メモを保存しました 🎙');log('ok','講師メモ(.md)を保存');}
+
+/* ===================== PDF（印刷） ===================== */
+function buildPrintHtml(){
+  var total=totalMins(currentDeck);
+  var html='<div class="p-slide p-cover"><h1>'+esc(currentTheme)+'</h1><p>新卒研修ワークショップ ／ '+currentDeck.length+'枚・合計約'+total+'分</p><p style="margin-top:30pt;color:#8E6FCB">🪻 うさうさ研修工房</p></div>';
+  currentDeck.forEach(function(sl,i){
+    var col=tagColor(sl.type);
+    var bl=arr(sl.bullets).map(function(b){return '<li>'+esc(b)+'</li>';}).join('');
+    html+='<div class="p-slide" style="border-top-color:'+col+'">'+
+      '<div class="p-top"><span class="p-num">'+esc(sl.no||i+1)+'</span>'+
+        '<span class="p-title">'+esc(sl.title)+'</span>'+
+        '<span class="p-tag" style="background:'+col+'">'+esc(sl.type||'本編')+'</span>'+
+        (sl.minutes?'<span class="p-mins">'+esc(sl.minutes)+'分</span>':'')+'</div>'+
+      (bl?'<ul>'+bl+'</ul>':'')+
+      (sl.activity?'<div class="p-act"><b>🛠 演習・ワーク</b><br>'+esc(sl.activity)+'</div>':'')+
+      (sl.notes?'<div class="p-note"><b>🎙 講師ノート</b><br>'+esc(sl.notes)+'</div>':'')+
+    '</div>';
+  });
+  return html;
+}
+function exportPdf(){
+  if(!currentDeck)return;
+  document.getElementById('printArea').innerHTML=buildPrintHtml();
+  log('info','PDF（印刷ダイアログ）を起動。保存先で「PDFに保存」を選んでください。');
+  toast('印刷ダイアログから「PDFに保存」を選んでください 🖨');
+  setTimeout(function(){window.print();},120);
+}
+
+/* ===================== PPTX（純JS・外部依存なし） ===================== */
+var crcTable=(function(){var t=[];for(var n=0;n<256;n++){var c=n;for(var k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0;}return t;})();
+function crc32(b){var c=0xFFFFFFFF;for(var i=0;i<b.length;i++)c=crcTable[(c^b[i])&0xFF]^(c>>>8);return(c^0xFFFFFFFF)>>>0;}
+function makeZip(files){
+  var enc=new TextEncoder();var chunks=[],central=[],offset=0;
+  function u16(n){return [n&255,(n>>8)&255];}function u32(n){return [n&255,(n>>8)&255,(n>>16)&255,(n>>>24)&255];}
+  function push(a){chunks.push(a);offset+=a.length;}
+  for(var i=0;i<files.length;i++){
+    var f=files[i];var nameB=enc.encode(f.name);var data=typeof f.data==='string'?enc.encode(f.data):f.data;var crc=crc32(data);var lo=offset;
+    push(new Uint8Array([].concat(u32(0x04034b50),u16(20),u16(0x0800),u16(0),u16(0),u16(0),u32(crc),u32(data.length),u32(data.length),u16(nameB.length),u16(0))));
+    push(nameB);push(data);
+    central.push({h:new Uint8Array([].concat(u32(0x02014b50),u16(20),u16(20),u16(0x0800),u16(0),u16(0),u16(0),u32(crc),u32(data.length),u32(data.length),u16(nameB.length),u16(0),u16(0),u16(0),u16(0),u32(0),u32(lo))),n:nameB});
+  }
+  var cds=offset,cdsz=0;for(var j=0;j<central.length;j++){push(central[j].h);push(central[j].n);cdsz+=central[j].h.length+central[j].n.length;}
+  push(new Uint8Array([].concat(u32(0x06054b50),u16(0),u16(0),u16(central.length),u16(central.length),u32(cdsz),u32(cds),u16(0))));
+  var tot=0;for(var m=0;m<chunks.length;m++)tot+=chunks[m].length;
+  var out=new Uint8Array(tot),p=0;for(var q=0;q<chunks.length;q++){out.set(chunks[q],p);p+=chunks[q].length;}return out;
+}
+var PNS='xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"';
+var CLRMAPOVR='<p:clrMapOvr><a:overrideClrMapping bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/></p:clrMapOvr>';
+function pEsc(s){return(s==null?'':String(s)).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function pRun(t,sz,c,b){return '<a:r><a:rPr lang="ja-JP" sz="'+sz+'"'+(b?' b="1"':'')+'><a:solidFill><a:srgbClr val="'+c+'"/></a:solidFill></a:rPr><a:t>'+pEsc(t)+'</a:t></a:r>';}
+function pPara(r,bullet){return '<a:p>'+(bullet?'<a:pPr marL="285750" indent="-285750"><a:buChar char="&#8226;"/></a:pPr>':'<a:pPr><a:buNone/></a:pPr>')+r+'</a:p>';}
+function pSlideXml(sl){
+  var paras=arr(sl.bullets).map(function(b){return pPara(pRun(b,2000,"382A52"),true);}).join('');
+  if(sl.activity){paras+=pPara(pRun('🛠 演習・ワーク',1400,"BE708F",true));paras+=pPara(pRun(sl.activity,1500,"5D3A4C"));}
+  if(sl.notes){paras+=pPara(pRun('🎙 講師ノート',1400,"7558B0",true));paras+=pPara(pRun(sl.notes,1500,"6B5A8A"));}
+  if(!paras)paras=pPara(pRun(' ',1800,"382A52"));
+  var col=hex(sl.type);
+  var title='<p:sp><p:nvSpPr><p:cNvPr id="2" name="Title"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="685800" y="457200"/><a:ext cx="10820400" cy="1143000"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr><p:txBody><a:bodyPr anchor="b"/><a:lstStyle/>'+pPara(pRun(sl.title,3600,"4A3370",true))+'</p:txBody></p:sp>';
+  var line='<p:sp><p:nvSpPr><p:cNvPr id="3" name="Accent"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="685800" y="1645920"/><a:ext cx="2286000" cy="45720"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="'+col+'"/></a:solidFill></p:spPr><p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:endParaRPr lang="ja-JP"/></a:p></p:txBody></p:sp>';
+  var body='<p:sp><p:nvSpPr><p:cNvPr id="4" name="Body"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="685800" y="1965960"/><a:ext cx="10820400" cy="4434840"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr><p:txBody><a:bodyPr><a:normAutofit/></a:bodyPr><a:lstStyle/>'+paras+'</p:txBody></p:sp>';
+  return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<p:sld '+PNS+'><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>'+title+line+body+'</p:spTree></p:cSld>'+CLRMAPOVR+'</p:sld>';
+}
+function buildPptx(deck){
+  var W=12192000,H=6858000,n=deck.length,f=[];
+  var ov=deck.map(function(_,i){return '<Override PartName="/ppt/slides/slide'+(i+1)+'.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>';}).join('');
+  f.push({name:'[Content_Types].xml',data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/><Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/><Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/><Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>'+ov+'</Types>'});
+  f.push({name:'_rels/.rels',data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/></Relationships>'});
+  var sldIds=deck.map(function(_,i){return '<p:sldId id="'+(256+i)+'" r:id="rId'+(i+2)+'"/>';}).join('');
+  f.push({name:'ppt/presentation.xml',data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:presentation '+PNS+'><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst>'+sldIds+'</p:sldIdLst><p:sldSz cx="'+W+'" cy="'+H+'"/><p:notesSz cx="'+H+'" cy="'+W+'"/></p:presentation>'});
+  var prel='<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster1.xml"/><Relationship Id="rIdTheme" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="theme/theme1.xml"/>';
+  deck.forEach(function(_,i){prel+='<Relationship Id="rId'+(i+2)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide'+(i+1)+'.xml"/>';});
+  f.push({name:'ppt/_rels/presentation.xml.rels',data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+prel+'</Relationships>'});
+  f.push({name:'ppt/theme/theme1.xml',data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Lavender"><a:themeElements><a:clrScheme name="Lavender"><a:dk1><a:sysClr val="windowText" lastClr="000000"/></a:dk1><a:lt1><a:sysClr val="window" lastClr="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="4A3370"/></a:dk2><a:lt2><a:srgbClr val="F6F3FB"/></a:lt2><a:accent1><a:srgbClr val="8E6FCB"/></a:accent1><a:accent2><a:srgbClr val="7558B0"/></a:accent2><a:accent3><a:srgbClr val="A98FD8"/></a:accent3><a:accent4><a:srgbClr val="6E8456"/></a:accent4><a:accent5><a:srgbClr val="C28A24"/></a:accent5><a:accent6><a:srgbClr val="BE708F"/></a:accent6><a:hlink><a:srgbClr val="7558B0"/></a:hlink><a:folHlink><a:srgbClr val="A98FD8"/></a:folHlink></a:clrScheme><a:fontScheme name="Lavender"><a:majorFont><a:latin typeface="Yu Gothic"/><a:ea typeface="Yu Gothic"/><a:cs typeface=""/></a:majorFont><a:minorFont><a:latin typeface="Yu Gothic"/><a:ea typeface="Yu Gothic"/><a:cs typeface=""/></a:minorFont></a:fontScheme><a:fmtScheme name="Lavender"><a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:fillStyleLst><a:lnStyleLst><a:ln w="6350"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="12700"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln w="19050"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst><a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>'});
+  f.push({name:'ppt/slideMasters/slideMaster1.xml',data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sldMaster '+PNS+'><p:cSld><p:bg><p:bgPr><a:solidFill><a:srgbClr val="F6F3FB"/></a:solidFill><a:effectLst/></p:bgPr></p:bg><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr></p:spTree></p:cSld><p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/><p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst><p:txStyles><p:titleStyle><a:lvl1pPr><a:defRPr sz="4000"><a:solidFill><a:srgbClr val="4A3370"/></a:solidFill></a:defRPr></a:lvl1pPr></p:titleStyle><p:bodyStyle><a:lvl1pPr marL="285750" indent="-285750"><a:buChar char="&#8226;"/><a:defRPr sz="2000"><a:solidFill><a:srgbClr val="382A52"/></a:solidFill></a:defRPr></a:lvl1pPr></p:bodyStyle><p:otherStyle><a:lvl1pPr><a:defRPr sz="1800"/></a:lvl1pPr></p:otherStyle></p:txStyles></p:sldMaster>'});
+  f.push({name:'ppt/slideMasters/_rels/slideMaster1.xml.rels',data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="../theme/theme1.xml"/></Relationships>'});
+  f.push({name:'ppt/slideLayouts/slideLayout1.xml',data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sldLayout '+PNS+' type="blank" preserve="1"><p:cSld name="Blank"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>'});
+  f.push({name:'ppt/slideLayouts/_rels/slideLayout1.xml.rels',data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/></Relationships>'});
+  deck.forEach(function(sl,i){
+    f.push({name:'ppt/slides/slide'+(i+1)+'.xml',data:pSlideXml(sl)});
+    f.push({name:'ppt/slides/_rels/slide'+(i+1)+'.xml.rels',data:'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/></Relationships>'});
+  });
+  return makeZip(f);
+}
+function exportPptx(){
+  if(!currentDeck)return;
+  try{
+    log('info','PPTX生成開始: '+currentDeck.length+'枚');
+    var bytes=buildPptx(currentDeck);
+    saveBlob(bytes,safeName()+'_'+todayStamp()+'.pptx','application/vnd.openxmlformats-officedocument.presentationml.presentation');
+    toast('.pptx を保存しました 📊');
+    log('ok','PPTX生成成功: '+bytes.length+' bytes');
+  }catch(e){log('err','PPTX生成失敗: '+e.message);toast('PPTX生成でエラーが出ました');}
+}
+
+/* ===================== 見本 ===================== */
+function showSample(){
+  currentTheme='情報セキュリティの基本（見本）';
+  currentDeck=[
+    {no:1,type:"表紙",title:"はじめての情報セキュリティ",bullets:["新卒エンジニア向けワークショップ","〜守る人になるための第一歩〜"],notes:"明るく自己紹介し、「今日は怖がらせる時間ではなく、守り方を身につける時間です」と伝える。",minutes:2,activity:""},
+    {no:2,type:"導入",title:"なぜセキュリティが必要？",bullets:["情報は会社の大切な財産","一度の漏えいが信頼を失わせる","守るのは特別な人ではなく全員"],notes:"身近なニュースを1つ挙げ、自分ごととして考えてもらう。",minutes:6,activity:""},
+    {no:3,type:"本編",title:"3つの基本：機密性・完全性・可用性",bullets:["機密性：見せていい人にだけ見せる","完全性：勝手に書き換えられない","可用性：使いたいときに使える"],notes:"うさうさラーメン店にたとえる：レシピは秘密(機密性)、味を変えない(完全性)、開店時間に開ける(可用性)。",minutes:10,activity:""},
+    {no:4,type:"演習",title:"やってみよう：強いパスワード",bullets:["弱い例と強い例を見比べる","パスフレーズの作り方を体験"],notes:"恥ずかしい実例より、作る楽しさにフォーカスする。",minutes:12,activity:"3〜4人グループで「覚えやすく破られにくいパスフレーズ」を1つ考え、なぜ強いかを1分で発表する。"},
+    {no:5,type:"クイズ",title:"このメール、開いていい？",bullets:["3問の○×クイズ","フィッシングの見抜き方"],notes:"挙手やチャットで全員参加。間違えても責めない雰囲気づくりを。",minutes:8,activity:"差出人・URL・添付ファイルの3点を確認するクイズを出題し、判断の理由を共有する。"},
+    {no:6,type:"まとめ",title:"今日からできる3つの習慣",bullets:["怪しいと思ったら一人で抱えず相談","パスワードは使い回さない","困ったらすぐ報連相"],notes:"完璧でなくていい、相談できる人が一番強い、と締める。Q&Aへ。",minutes:7,activity:""}
+  ];
+  renderDeck(currentDeck);
+  toast('これは見本です。書き出しも試せます 🪻');
+  log('info','見本デックを読み込み（6枚）');
+}
+
+/* ===== テスト用エクスポート（ブラウザ動作には影響なし） ===== */
+if(typeof module!=='undefined'&&module.exports){
+  module.exports={esc:esc,tagColor:tagColor,hex:hex,totalMins:totalMins,safeName:safeName,buildPrompt:buildPrompt,parseDeck:parseDeck,deckToMarkdown:deckToMarkdown,deckToMemo:deckToMemo,buildPptx:buildPptx,crc32:crc32,makeZip:makeZip,pSlideXml:pSlideXml,renderDeck:renderDeck,buildPrintHtml:buildPrintHtml,todayStamp:todayStamp};
+}
+
+/* init */
+log('ok','ツールを起動しました（v1.0.0 PRO）。使い方は上の黒板をご覧ください。');
+</script>
+</body>
+</html>
